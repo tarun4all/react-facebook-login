@@ -1,0 +1,157 @@
+import React, { Component } from "react"; 
+import { Button, Table, Divider, Row, Col, Card, DatePicker, Icon, Form } from "antd";
+import { Request } from "../../helper/axios";
+import { connect } from "react-redux";
+import { ANALYTICS_URL } from "../../config/urls";
+import { showLoader, hideLoader, showNotifcation } from "../../actions/global";
+import Highcharts from 'highcharts';
+import moment from 'moment';
+
+const { RangePicker } = DatePicker;
+class Root extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            ready: false,
+            fromDate: moment().subtract(7, 'days').format("YYYY-MM-DD"),
+            toDate: moment().format("YYYY-MM-DD"),
+            filter: false,
+            stats: []
+        }
+    }
+
+    componentDidMount = () => {
+        this.getSessionData();
+    }
+
+    getSessionData = () => {
+        //ajax call for sessions data
+        const context = this;
+        const requestOption = {
+            method: "GET",
+            url: ANALYTICS_URL.GET_ANALYTICS_DATA,
+            params: {
+                fromDate: this.state.fromDate,
+                toDate: this.state.toDate
+            }
+        };
+        this.props.dispatch(showLoader());
+        Request(
+            requestOption,
+            response => {
+                context.setState({ stats: response });
+                this.setState({ ready: true });
+                context.props.dispatch(hideLoader());
+                console.log(this.state);
+                this.highChartsRender();
+            },
+            error => {
+                context.props.dispatch(
+                    showNotifcation({
+                        alertType: "error",
+                        message: error.message || "Error",
+                        status: 1
+                    })
+                );
+                context.props.dispatch(hideLoader());
+                this.setState({ ready: true });
+            }
+        );
+    }
+
+    highChartsRender = () => {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let category=[];
+        for(let i=0;i<(this.state.stats).length;i++){
+            category.push((new Date(this.state.stats[i].date)).getDate()+" "+monthNames[(new Date(this.state.stats[i].date)).getMonth()]);
+        }
+        console.log(category);
+        let sessionCount = [];
+        this.state.stats.forEach(function(item){
+            sessionCount.push(item.session);
+        });
+        Highcharts.chart({
+            chart: {
+              renderTo: 'sessionGraph'
+            },
+            title: {
+                text: 'Sessions'
+            },
+            xAxis: {
+                categories: category
+            },
+            yAxis: {
+                title: {
+                    text: 'Number of sessions'
+                }
+            },
+            legend: {
+                layout: 'vertical',
+                align: 'right',
+                verticalAlign: 'middle'
+            },
+            plotOptions: {
+                series: {
+                    label: {
+                        connectorAllowed: false
+                    }
+                }
+            },
+            series: [{
+                name: 'Sessions',
+                data: sessionCount
+            }]
+      
+          });
+    }
+
+    filterList = () => {
+        if (!this.state.filter) {
+            this.setState({ ready: false });
+            this.getSessionData();
+        }
+        else {
+            document.getElementsByClassName("ant-calendar-picker-input")[0].setAttribute("style", "border-color: red;");
+        }
+    }
+
+    getDate = (date, dateString) => {
+        if (dateString[0] && dateString[1]) {
+            document.getElementsByClassName("ant-calendar-picker-input")[0].setAttribute("style", "border-color: #d9d9d9;");
+            this.setState({ fromDate: dateString[0] });
+            this.setState({ toDate: dateString[1] });
+            this.setState({ filter: false });
+        } else {
+            this.setState({ filter: true });
+        }
+    }
+
+    render() {
+        return (
+            <div className="_stroyView">
+                <div className="_header">
+                    <h3 className="_heading">Analytics</h3>
+                    <div style={{ "marginTop": "14px", "marginLeft": "510px" }}>
+                        <RangePicker className='rangeColourBlank' onChange={this.getDate} defaultValue={[moment(this.state.fromDate), moment(this.state.toDate)]} />
+                        <Button type="primary" onClick={this.filterList} style={{ "marginLeft": "50px" }}><Icon type="filter" />Filter</Button>
+                    </div>
+                </div>
+                <Divider />
+                <div style={{ padding: '20px', marginLeft: '20px', marginTop: '20px' }}>
+                    <Card title="Sessions" bordered={true} style={{ height: 500, width: 1050 }}>
+                    <div id="sessionGraph">
+                    </div>
+                    </Card>
+                </div>
+                
+            </div>
+        );
+    }
+}
+
+
+const WrappedHome = Form.create()(Root);
+function mapStateToProps(state) {
+    return state;
+}
+export default connect(mapStateToProps)(WrappedHome);

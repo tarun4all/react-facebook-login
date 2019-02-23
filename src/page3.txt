@@ -1,0 +1,22 @@
+const session_analytics = async function (params) {
+    if (params.brandID) {
+        const where = getWhere(params);
+        const sql = 'SELECT DATE_FORMAT(time, ' +`'%Y-%m-%d'`+') as day, sum(sessions + sessions_mob + sessions_tab) as session FROM '  + table + ' WHERE ' + where.sql + "group by day ORDER BY time";
+        const cond = Object.values(where.data);
+        // connect to db
+        const connection = await db.connect('notifychat');
+        if (!connection) {
+            return -3;
+        }
+
+        const result = await db.query(connection, sql, cond);
+        let data = null;
+        if (typeof result === 'object' && Object.keys(result).length > 0) {
+            data = utils.modalValidateOutput(result);
+        } else {
+            data = [];
+        }
+        return data;
+    }
+    return -2;
+}

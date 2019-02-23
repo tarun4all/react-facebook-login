@@ -1,0 +1,96 @@
+const express = require('express')
+    , router = express.Router();
+const moment = require('moment');
+
+const m_daily_stats = require(ROOT_DIR + '/models/notifications/m_daily_stats');
+const m_stories = require(ROOT_DIR + '/models/notifications/m_stories');
+
+router.get('/data', async function (req, res) {
+    if (req.query && res.locals.brandInfo.brandID) {
+        let returnData = {};
+        let params = {
+            brandID: res.locals.brandInfo.brandID,
+        };
+
+        params.fromDate = req.query.fromDate ? req.query.fromDate : moment().subtract(7, 'days').format("YYYY-MM-DD");
+        params.toDate = req.query.toDate ? req.query.toDate : moment().format("YYYY-MM-DD");
+        const overallData = await m_daily_stats.count(params);
+        if (overallData) {
+            returnData.overallData = overallData;
+        }
+        
+        if (returnData && Object.keys(returnData).length > 0) {
+            const storyData = await m_daily_stats.count_group(params);
+            if (storyData && typeof storyData ==='object') {
+                await m_stories.fetch({
+                    brandID: params.brandID,
+                    status: "(1,0)"
+                }).then(function (resp) {
+                    let result = resp;
+                    if (result) {
+                        result = result.reduce(function (initalObj, dataObj) {
+                            var key = dataObj['chat_app_id'];
+                            if(!initalObj[key]) {
+                                   initalObj[key] = dataObj.name;
+                            }
+                            return initalObj;
+                        }, {});
+                        for (let i = 0; i < storyData.length; i++) {
+                            if(Object.prototype.hasOwnProperty.call(result, storyData[i].chatapp_id)){
+                                storyData[i].name = result[storyData[i].chatapp_id];
+                            }
+                        }
+                        returnData.storyData = storyData;
+                    }
+                }, function (err) {
+                    returnData = err;
+                });
+            }
+        }
+        return res.send(returnData);
+    }
+});
+
+router.get('/analytics', async function (req, res) {
+    if (req.query && res.locals.brandInfo.brandID) {
+        let params = {
+            brandID: res.locals.brandInfo.brandID,
+        };
+        params.fromDate = req.query.fromDate ? req.query.fromDate : moment().subtract(30, 'days').format("YYYY-MM-DD");
+        params.toDate = req.query.toDate ? req.query.toDate : moment().format("YYYY-MM-DD");
+        const storyData = await m_daily_stats.session_analytics(params);
+        function formatDate(date) {
+                var d = new Date(date),
+                    month = '' + (d.getMonth() + 1),
+                    day = '' + d.getDate(),
+                    year = d.getFullYear();
+            
+                if (month.length < 2) month = '0' + month;
+                if (day.length < 2) day = '0' + day;
+            
+                return [year, month, day].join('-');
+        }
+        let startDate = new Date(params.fromDate);
+        let endDate = new Date(params.toDate);
+        let DateArr = [];
+        let getDateArray = function(start, end) {
+                let dt = new Date(start);
+                while (dt <= end) {
+                    DateArr.push({date:formatDate (new Date(dt)), session:0});
+                    dt.setDate(dt.getDate() + 1);
+                }
+        }
+        getDateArray(startDate, endDate);
+        for (let i=0; i<DateArr.length; i++) {
+            storyData.forEach( function(item) {
+                if (item.day == DateArr[i].date) {
+                    DateArr[i].session=item.session;
+                }
+            });
+        }
+        console.log(DateArr);
+        return res.send(DateArr);
+    }
+});
+
+module.exports = router;
